@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2023 Red Hat, Inc.
+ * Copyright (C) 2023-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
-import { readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import { app, nativeImage, nativeTheme } from 'electron';
@@ -37,17 +37,27 @@ class TestAnimatedTray extends AnimatedTray {
   override getIconPath(iconName: string): string | Electron.NativeImage {
     return super.getIconPath(iconName);
   }
+
+  override publishLinuxStatusNotifierTheme(): void {
+    super.publishLinuxStatusNotifierTheme();
+  }
 }
 
 let testAnimatedTray: TestAnimatedTray;
 
 vi.mock(import('node:fs'), () => ({
   readFileSync: vi.fn().mockReturnValue(Buffer.from('')),
+  existsSync: vi.fn().mockReturnValue(false),
+  readdirSync: vi.fn().mockReturnValue([]),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  copyFileSync: vi.fn(),
 }));
 
 vi.mock(import('./util.js'), () => ({
   isMac: vi.fn(),
   isWindows: vi.fn(),
+  isLinux: vi.fn(),
 }));
 
 const setShouldUseDarkColors = (value: boolean): void => {
@@ -65,6 +75,7 @@ beforeEach(() => {
   // Reset platform detection to false by default
   vi.mocked(util.isMac).mockReturnValue(false);
   vi.mocked(util.isWindows).mockReturnValue(false);
+  vi.mocked(util.isLinux).mockReturnValue(false);
 
   // Reset theme to light by default
   setShouldUseDarkColors(false);
@@ -190,4 +201,32 @@ test('dispose should remove nativeTheme listener', () => {
   testAnimatedTray.dispose();
 
   expect(nativeTheme.off).toHaveBeenCalledWith('updated', expect.any(Function));
+});
+
+test('Linux should write a GTK icon theme next to Electron status_icon PNGs', () => {
+  vi.mocked(util.isLinux).mockReturnValue(true);
+  const runtimeDir = '/run/user/1000';
+  const chromeDir = 'org.chromium.Chromium.abc123';
+  vi.stubEnv('XDG_RUNTIME_DIR', runtimeDir);
+  vi.mocked(existsSync).mockReturnValue(true);
+  vi.mocked(readdirSync)
+    .mockReturnValueOnce([chromeDir] as never)
+    .mockReturnValueOnce(['status_icon_8.png'] as never);
+
+  testAnimatedTray.publishLinuxStatusNotifierTheme();
+
+  expect(writeFileSync).toHaveBeenCalledWith(
+    path.join(runtimeDir, chromeDir, 'index.theme'),
+    expect.stringContaining('[Icon Theme]'),
+    expect.anything(),
+  );
+  expect(mkdirSync).toHaveBeenCalled();
+  expect(copyFileSync).toHaveBeenCalled();
+  vi.unstubAllEnvs();
+});
+
+test('non-Linux should not write a tray icon theme', () => {
+  vi.mocked(util.isLinux).mockReturnValue(false);
+  testAnimatedTray.publishLinuxStatusNotifierTheme();
+  expect(writeFileSync).not.toHaveBeenCalled();
 });
