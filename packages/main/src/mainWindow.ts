@@ -16,6 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { URL } from 'node:url';
 
@@ -75,6 +76,19 @@ async function createWindow(): Promise<BrowserWindow> {
     browserWindowConstructorOptions.frame = false;
   } else {
     browserWindowConstructorOptions.titleBarStyle = 'hidden';
+  }
+
+  // Unmatched X11 windows otherwise use Yaru's application-x-executable icon (a gear)
+  // because Chromium does not set _NET_WM_ICON when BrowserWindow has no icon.
+  if (isLinux()) {
+    const linuxIcon = [
+      '/app/share/icons/hicolor/256x256/apps/io.podman_desktop.PodmanDesktop.png',
+      '/app/share/icons/hicolor/512x512/apps/io.podman_desktop.PodmanDesktop.png',
+      join(app.getAppPath(), 'packages/main/src/assets/tray-icon.png'),
+    ].find(candidate => existsSync(candidate));
+    if (linuxIcon) {
+      browserWindowConstructorOptions.icon = linuxIcon;
+    }
   }
 
   if (isMac()) {

@@ -243,6 +243,12 @@ const config = {
     category: 'Development',
     icon: './buildResources/icon-512x512.png',
     executableName: product.artifactName,
+    // Electron's X11 WM_CLASS is the executable name ("podman-desktop"), not
+    // productName ("Podman Desktop"). GNOME's dock uses StartupWMClass to match
+    // the running window to this desktop file; a mismatch shows a generic gear.
+    desktop: {
+      StartupWMClass: 'podman-desktop',
+    },
     artifactName: `${product.artifactName}${artifactNameSuffix}-\${version}-\${arch}.\${ext}`,
     target: ['flatpak', { target: 'tar.gz', arch: ['x64', 'arm64'] }],
   },
